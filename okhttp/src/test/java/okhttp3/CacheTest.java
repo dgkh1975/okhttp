@@ -16,7 +16,6 @@
 
 package okhttp3;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.CookieManager;
 import java.net.HttpURLConnection;
@@ -25,6 +24,7 @@ import java.security.Principal;
 import java.security.cert.Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -38,15 +38,18 @@ import mockwebserver3.MockResponse;
 import mockwebserver3.MockWebServer;
 import mockwebserver3.RecordedRequest;
 import okhttp3.internal.Internal;
-import okhttp3.internal.io.InMemoryFileSystem;
 import okhttp3.internal.platform.Platform;
 import okhttp3.testing.PlatformRule;
 import okhttp3.tls.HandshakeCertificates;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
+import okio.FileSystem;
+import okio.ForwardingFileSystem;
 import okio.GzipSink;
 import okio.Okio;
+import okio.Path;
+import okio.fakefilesystem.FakeFileSystem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -64,7 +67,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 public final class CacheTest {
   private static final HostnameVerifier NULL_HOSTNAME_VERIFIER = (name, session) -> true;
 
-  @RegisterExtension public InMemoryFileSystem fileSystem = new InMemoryFileSystem();
+  public FakeFileSystem fileSystem = new FakeFileSystem();
   @RegisterExtension public final OkHttpClientTestRule clientTestRule = new OkHttpClientTestRule();
   @RegisterExtension public final PlatformRule platform = new PlatformRule();
 
@@ -83,7 +86,8 @@ public final class CacheTest {
     platform.assumeNotBouncyCastle();
 
     server.setProtocolNegotiationEnabled(false);
-    cache = new Cache(new File("/cache/"), Integer.MAX_VALUE, fileSystem);
+    fileSystem.emulateUnix();
+    cache = new Cache(Path.get("/cache/"), Integer.MAX_VALUE, fileSystem);
     client = clientTestRule.newClientBuilder()
         .cache(cache)
         .cookieJar(new JavaNetCookieJar(cookieManager))
@@ -2061,10 +2065,11 @@ public final class CacheTest {
         + "2\n"
         + "\n"
         + "CLEAN " + urlKey + " " + entryMetadata.length() + " " + entryBody.length() + "\n";
-    writeFile(cache.directory(), urlKey + ".0", entryMetadata);
-    writeFile(cache.directory(), urlKey + ".1", entryBody);
-    writeFile(cache.directory(), "journal", journalBody);
-    cache = new Cache(cache.directory(), Integer.MAX_VALUE, fileSystem);
+    fileSystem.createDirectory(cache.directoryPath());
+    writeFile(cache.directoryPath(), urlKey + ".0", entryMetadata);
+    writeFile(cache.directoryPath(), urlKey + ".1", entryBody);
+    writeFile(cache.directoryPath(), "journal", journalBody);
+    cache = new Cache(Path.get(cache.directory().getPath()), Integer.MAX_VALUE, fileSystem);
     client = client.newBuilder()
         .cache(cache)
         .build();
@@ -2110,11 +2115,12 @@ public final class CacheTest {
         + "\n"
         + "DIRTY " + urlKey + "\n"
         + "CLEAN " + urlKey + " " + entryMetadata.length() + " " + entryBody.length() + "\n";
-    writeFile(cache.directory(), urlKey + ".0", entryMetadata);
-    writeFile(cache.directory(), urlKey + ".1", entryBody);
-    writeFile(cache.directory(), "journal", journalBody);
+    fileSystem.createDirectory(cache.directoryPath());
+    writeFile(cache.directoryPath(), urlKey + ".0", entryMetadata);
+    writeFile(cache.directoryPath(), urlKey + ".1", entryBody);
+    writeFile(cache.directoryPath(), "journal", journalBody);
     cache.close();
-    cache = new Cache(cache.directory(), Integer.MAX_VALUE, fileSystem);
+    cache = new Cache(Path.get(cache.directory().getPath()), Integer.MAX_VALUE, fileSystem);
     client = client.newBuilder()
         .cache(cache)
         .build();
@@ -2160,11 +2166,12 @@ public final class CacheTest {
         + "\n"
         + "DIRTY " + urlKey + "\n"
         + "CLEAN " + urlKey + " " + entryMetadata.length() + " " + entryBody.length() + "\n";
-    writeFile(cache.directory(), urlKey + ".0", entryMetadata);
-    writeFile(cache.directory(), urlKey + ".1", entryBody);
-    writeFile(cache.directory(), "journal", journalBody);
+    fileSystem.createDirectory(cache.directoryPath());
+    writeFile(cache.directoryPath(), urlKey + ".0", entryMetadata);
+    writeFile(cache.directoryPath(), urlKey + ".1", entryBody);
+    writeFile(cache.directoryPath(), "journal", journalBody);
     cache.close();
-    cache = new Cache(cache.directory(), Integer.MAX_VALUE, fileSystem);
+    cache = new Cache(Path.get(cache.directory().getPath()), Integer.MAX_VALUE, fileSystem);
     client = client.newBuilder()
         .cache(cache)
         .build();
@@ -2197,11 +2204,12 @@ public final class CacheTest {
         + "\n"
         + "DIRTY " + urlKey + "\n"
         + "CLEAN " + urlKey + " " + entryMetadata.length() + " " + entryBody.length() + "\n";
-    writeFile(cache.directory(), urlKey + ".0", entryMetadata);
-    writeFile(cache.directory(), urlKey + ".1", entryBody);
-    writeFile(cache.directory(), "journal", journalBody);
+    fileSystem.createDirectory(cache.directoryPath());
+    writeFile(cache.directoryPath(), urlKey + ".0", entryMetadata);
+    writeFile(cache.directoryPath(), urlKey + ".1", entryBody);
+    writeFile(cache.directoryPath(), "journal", journalBody);
     cache.close();
-    cache = new Cache(cache.directory(), Integer.MAX_VALUE, fileSystem);
+    cache = new Cache(Path.get(cache.directory().getPath()), Integer.MAX_VALUE, fileSystem);
     client = client.newBuilder()
         .cache(cache)
         .build();
@@ -2496,8 +2504,8 @@ public final class CacheTest {
     return client.newCall(request).execute();
   }
 
-  private void writeFile(File directory, String file, String content) throws IOException {
-    BufferedSink sink = Okio.buffer(fileSystem.sink(new File(directory, file)));
+  private void writeFile(Path directory, String file, String content) throws IOException {
+    BufferedSink sink = Okio.buffer(fileSystem.sink(directory.resolve(file)));
     sink.writeUtf8(content);
     sink.close();
   }
@@ -2603,6 +2611,53 @@ public final class CacheTest {
         .addHeader("Date: " + formatDate(-15, TimeUnit.SECONDS)));
     assertThat(conditionalRequest.getHeader("If-Modified-Since")).isEqualTo(
         lastModifiedDate);
+  }
+
+  @Test
+  public void testPublicPathConstructor() throws IOException {
+    List<String> events = new ArrayList<>();
+
+    fileSystem.createDirectories(cache.directoryPath());
+
+    fileSystem.createDirectories(cache.directoryPath());
+
+    FileSystem loggingFileSystem = new ForwardingFileSystem(fileSystem) {
+      @Override
+      public Path onPathParameter(Path path, java.lang.String functionName, java.lang.String parameterName) {
+        events.add(functionName + ":" + path);
+        return path;
+      }
+
+      @Override
+      public Path onPathResult(Path path, java.lang.String functionName) {
+        events.add(functionName + ":" + path);
+        return path;
+      }
+    };
+    Path path = Path.get("/cache");
+    Cache c = new Cache(path, 100000L, loggingFileSystem);
+
+    assertThat(c.directoryPath()).isEqualTo(path);
+
+    c.size();
+
+    assertThat(events).containsExactly("metadataOrNull:/cache/journal.bkp",
+            "metadataOrNull:/cache",
+            "sink:/cache/journal.bkp",
+            "delete:/cache/journal.bkp",
+            "metadataOrNull:/cache/journal",
+            "metadataOrNull:/cache",
+            "sink:/cache/journal.tmp",
+            "metadataOrNull:/cache/journal",
+            "atomicMove:/cache/journal.tmp",
+            "atomicMove:/cache/journal",
+            "appendingSink:/cache/journal");
+
+    events.clear();
+
+    c.size();
+
+    assertThat(events).isEmpty();
   }
 
   private void assertFullyCached(MockResponse response) throws Exception {
